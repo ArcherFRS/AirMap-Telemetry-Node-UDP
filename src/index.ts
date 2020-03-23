@@ -98,7 +98,7 @@ class Simulator {
 
 // anonymous user (returns JWT)
 
-async function getToken(apiKey: string, userId: string) {
+async function getToken(apiKey: string, userId: string): Promise<string> {
     const options: Options = {
         method: 'POST',
         url: `https://api.airmap.com/auth/v1/anonymous/token`,
@@ -116,7 +116,8 @@ async function getToken(apiKey: string, userId: string) {
         console.log("error getting token", err);
     });
     console.log("Credentials", credentials);
-    return credentials;
+    const token = credentials?.data?.id_token as string;
+    return token;
 }
 
 // create plan (returns planId)
@@ -241,9 +242,8 @@ async function init() {
         console.log("JWT", jwtResponse);
 
         // get pilot id
-        const decoded = jwt.decode(jwtResponse);
-        console.log("Decoded JWT", decoded);
-        const pilotId = decoded?.sub;
+        const pilotId = jwt.decode(jwtResponse)?.sub;
+        console.log("pilotId", pilotId);
 
         // create flight plan
         const planId = await createPlan(config.apiKey, jwtResponse, pilotId);
