@@ -1,0 +1,29 @@
+{
+  "name": "udp-client-typescript",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "copy-proto": "ncp ./src/telemetry.proto ./dist/telemetry.proto",
+    "build-local": "tsc && npm run copy-proto",
+    "start-local": "tsc && npm run copy-proto && node ./dist/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/jsonwebtoken": "^8.3.8",
+    "@types/node": "^13.9.2",
+    "@types/request-promise": "^4.1.46",
+    "ncp": "^2.0.0",
+    "typescript": "^3.8.3"
+  },
+  "dependencies": {
+    "jsonwebtoken": "^8.5.1",
+    "moment": "^2.24.0",
+    "protobufjs": "^6.8.9",
+    "request": "^2.88.2",
+    "request-promise": "^4.2.5"
+  }
+}
