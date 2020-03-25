@@ -1,18 +1,24 @@
 import * as dgram from "dgram";
+import * as crypto from "crypto";
 import moment from "moment";
 import request, { Options } from "request-promise";
 import * as config from "./airmap.config.json";
 import jwt from "jsonwebtoken";
 import { encodeProtoBuf } from "./protobuf-encoder.service";
+import { TextDecoder } from "util";
+import { IPosition } from "./position.interface";
 
 //  simple sawtooth wave simulation
 
 class Simulator {
-    public lat = 34.015802;
-    public lon = -118.451303;
-    public agl = 0.0;
-    public msl = 0.0;
-    public horizAccuracy = 0.0;
+    public position: IPosition = {
+        latitude: 49.444126,
+        longitude: -2.359227,
+        altitude_agl: 0.0,
+        altitude_msl: 0.0,
+        horizontal_accuracy: 0.0,
+        timestamp: 0
+    }
     public yaw = 0.0;
     public pitch = -90.0;
     public roll = -90.0;
@@ -36,28 +42,28 @@ class Simulator {
     }
 
     public getLatitude() {
-        this.lat = this.update(this.lat, 0.002, 34.02, 34.015802);
-        return this.lat;
+        this.position.latitude = this.update(this.position.latitude, 0.002, 49.444, 49.450);
+        return this.position.latitude;
     }
 
     public getLongitude() {
-        this.lon = this.update(this.lon, 0.002, -118.44, -118.451303);
-        return this.lon;
+        this.position.longitude = this.update(this.position.longitude, 0.002, -2.359, -2.366);
+        return this.position.longitude;
     }
 
     public getAgl() {
-        this.agl = this.update(this.agl, 1.0, 100.0, 0.0);
-        return this.agl;
+        this.position.altitude_agl = this.update(this.position.altitude_agl, 1.0, 100.0, 0.0);
+        return this.position.altitude_agl;
     }
 
     public getMsl() {
-        this.msl = this.update(this.msl, 1.0, 100.0, 0.0);
-        return this.msl;
+        this.position.altitude_msl = this.update(this.position.altitude_msl, 1.0, 100.0, 0.0);
+        return this.position.altitude_msl;
     }
 
     public getHorizAccuracy() {
-        this.horizAccuracy = this.update(this.horizAccuracy, 1.0, 10.0, 0.0);
-        return this.horizAccuracy;
+        this.position.horizontal_accuracy = this.update(this.position.horizontal_accuracy, 1.0, 10.0, 0.0);
+        return this.position.horizontal_accuracy;
     }
 
     public getYaw() {
@@ -122,7 +128,7 @@ async function getToken(apiKey: string, userId: string): Promise<string> {
 
 // create plan (returns planId)
 
-async function createPlan(apiKey: string, token: string, pilotId: string) {
+async function createPlan(apiKey: string, token: string, pilotId: string): Promise<string> {
     const options: Options = {
         method: 'POST',
         url: 'https://api.airmap.com/flight/v2/plan',
@@ -152,14 +158,15 @@ async function createPlan(apiKey: string, token: string, pilotId: string) {
         console.log("error creating plan", err);
     });
     console.log("Created Plan", plan);
-    return plan;
+    return plan?.data?.id;
 }
 
 // submit plan (returns flightId)
 
-async function submitPlan(apiKey: string, token: string, planId: string) {
+async function submitPlan(apiKey: string, token: string, planId: string): Promise<string> {
     const options: Options = {
         method: 'POST',
+        json: true,
         url: `https://api.airmap.com/flight/v2/plan/${planId}/submit`,
         headers: {
             "X-API-Key": apiKey,
@@ -171,7 +178,8 @@ async function submitPlan(apiKey: string, token: string, planId: string) {
         console.log("error submitting plan", err);
     });
     console.log("Submitted Plan", plan);
-    return plan;
+    const flightId = plan?.data?.flight_id;
+    return flightId;
 }
 
 // start comm (returns secretKey)
@@ -179,6 +187,7 @@ async function submitPlan(apiKey: string, token: string, planId: string) {
 async function startComm(apiKey: string, token: string, flightId: string) {
     const options: Options = {
         method: 'POST',
+        json: true,
         url: `https://api.airmap.com/flight/v2/${flightId}/start-comm`,
         headers: {
             "X-API-Key": apiKey,
@@ -189,14 +198,16 @@ async function startComm(apiKey: string, token: string, flightId: string) {
         console.log("error starting comm", err);
     });
     console.log("Comm Started", comm);
-    return comm;
+    const key = comm?.data?.key;
+    return key;
 }
 
 // end comm (returns 0)
 
-async function EndComm(apiKey: string, token: string, flightId: string) {
+async function endComm(apiKey: string, token: string, flightId: string) {
     const options: Options = {
         method: 'POST',
+        json: true,
         url: `https://api.airmap.com/flight/v2/${flightId}/end-comm`,
         headers: {
             "X-API-Key": apiKey,
@@ -212,7 +223,7 @@ async function EndComm(apiKey: string, token: string, flightId: string) {
 
 // end flight (returns 0)
 
-async function EndFlight(apiKey: string, token: string, flightId: string) {
+async function endFlight(apiKey: string, token: string, flightId: string) {
     const options: Options = {
         method: 'POST',
         url: `https://api.airmap.com/flight/v2/${flightId}/end`,
@@ -230,6 +241,15 @@ async function EndFlight(apiKey: string, token: string, flightId: string) {
 
 function sleep(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function encrypt(value: any, key: string) {
+    const iv = Buffer.alloc(16, 0);
+    const secretKey = Buffer.from(key, 'base64');
+    let cipher = crypto.createCipheriv('aes-256-cbc', secretKey, iv);
+    let encrypted = cipher.update(value, 'utf8', 'binary');
+    encrypted += cipher.final('binary');
+    return encrypted;
 }
 
 async function init() {
@@ -264,17 +284,27 @@ async function init() {
         }
 
         // decode key
-        const buffer = new Buffer(secretKey, 'base64');
-        const secretKeyDecoded = buffer.toString('ascii');
+        // const buffer = new Buffer(secretKey, 'base64');
+        // const secretKeyDecoded = buffer.toString('ascii');
 
         // messages
-        const position: any = {};
-        const attitude: any = {};
-        const speed: any = {};
-        const barometer: any = {};
+        const position: IPosition = {
+            timestamp: 0,
+            latitude: 0,
+            longitude: 0,
+            altitude_agl: 0,
+            altitude_msl: 0,
+            horizontal_accuracy: 0
+        }
+        // const attitude: any = {};
+        // const speed: any = {};
+        // const barometer: any = {};
 
         const sim = new Simulator();
         const client = dgram.createSocket("udp4");
+        const hostname = 'telemetry.airmap.com';
+        const portNumber = 16060;
+
         let counter = 1;
 
         try {
@@ -288,40 +318,59 @@ async function init() {
                 position.altitude_msl = sim.getMsl();
                 position.horizontal_accuracy = sim.getHorizAccuracy();
 
-                attitude.timestamp = timestamp;
-                attitude.yaw = sim.getYaw();
-                attitude.pitch = sim.getPitch();
-                attitude.roll = sim.getRoll();
+                // attitude.timestamp = timestamp;
+                // attitude.yaw = sim.getYaw();
+                // attitude.pitch = sim.getPitch();
+                // attitude.roll = sim.getRoll();
 
-                speed.timestamp = timestamp;
-                speed.velocity_x = sim.getVelocityX();
-                speed.velocity_y = sim.getVelocityY();
-                speed.velocity_z = sim.getVelocityZ();
+                // speed.timestamp = timestamp;
+                // speed.velocity_x = sim.getVelocityX();
+                // speed.velocity_y = sim.getVelocityY();
+                // speed.velocity_z = sim.getVelocityZ();
 
-                barometer.timestamp = timestamp;
-                barometer.pressure = sim.getPressure();
+                // barometer.timestamp = timestamp;
+                // barometer.pressure = sim.getPressure();
 
                 // build payload
 
-                const positionPayload = encodeProtoBuf("telemetry.proto", "airmap.telemetry.Position", position);
+                /* PACKAGE HEADER */
+                // Add serial number (start at one): uint32, 4 bytes
+                // Add length of flight id: uint8, 1 bytes
+                // Add flight id: string 1 - 256 bytes
+                // Add Encryption type: uint8, 1 bytes (currently only 'aes-256-cbc' is supported; I suppose "1" is the appropriate value here?)
+                // Add Initialization Vector: raw, 16 bytes
+                // Add Payload: raw, 1-65k bytes (byte concatenated, serialized messages, each prefixed by a Message Header)
 
-                const attitudePayload = encodeProtoBuf("telemetry.proto", "airmap.telemetry.Attitude", attitude);
+                /* Message Header */
+                // Add Message Type ID: uint16, 2 bytes
+                // Add serialized message length (max is 64kb): uint 16, 2 bytes
+                // Add Message (aka payload): Serialized protocol buffer (protobuf) byte string
 
-                const speedPayload = encodeProtoBuf("telemetry.proto", "airmap.telemetry.Speed", speed);
+                /* Message */
 
-                const barometerPayload = encodeProtoBuf("telemetry.proto", "airmap.telemetry.Barometer", barometer);
+                const positionPayloadBuffer = await encodeProtoBuf("./dist/telemetry.proto", "airmap.telemetry.Position", position);
+                // Now we have a byte array (e.g. [155,220])
+                // This byte array represents binary numbers (aka, 155 is converted to 10011011 and 220 to 11011100)
+                const positionPayload = Array.prototype.toString.call(positionPayloadBuffer);
+
+
+                // const attitudePayload = await encodeProtoBuf("./telemetry.proto", "airmap.telemetry.Attitude", attitude);
+
+                // const speedPayload = await encodeProtoBuf("./telemetry.proto", "airmap.telemetry.Speed", speed);
+
+                // const barometerPayload = await encodeProtoBuf("./telemetry.proto", "airmap.telemetry.Barometer", barometer);
 
                 // encrypt payload
-                const hostname = 'telemetry.airmap.com';
-                const portNumber = 16060;
-
-                client.connect(portNumber, hostname, () => {
-                    client.send([positionPayload, attitudePayload, speedPayload, barometerPayload], portNumber, (err, bytes) => {
-                        if (err) {
-                            console.log("Error sending payload", err);
-                        }
-                        console.log("Bytes sent", bytes);
-                    });
+                const payloadEncrypted = encrypt(positionPayload, secretKey);
+                console.log("Message:", position);
+                console.log("Encoded Message:", positionPayload);
+                console.log("Message Encrypted:", payloadEncrypted);
+                console.log("Message Encrypted Length:", payloadEncrypted);
+                client.send(payloadEncrypted, portNumber, hostname, (err: any, bytes: any) => {
+                    if (err) {
+                        console.log("Error sending payload", err);
+                    }
+                    console.log("Bytes sent", bytes);
                 });
 
                 // increment sequence number
@@ -336,8 +385,9 @@ async function init() {
         catch (e) {
             console.log("Error sending telemetry", e);
         }
-
         client.close();
+        await endComm(config.apiKey, jwtResponse, flightId);
+        await endFlight(config.apiKey, jwtResponse, flightId);
     }
     catch (e) {
         console.log("Error", e);

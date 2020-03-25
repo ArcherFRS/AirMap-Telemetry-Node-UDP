@@ -4,9 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "test-local": "mocha --reporter spec --require ts-node/register src/**/*.spec.ts",
     "copy-proto": "ncp ./src/telemetry.proto ./dist/telemetry.proto",
     "build-local": "tsc && npm run copy-proto",
     "start-local": "tsc && npm run copy-proto && node ./dist/index.js",
+    "generate-proto": "protoc --proto_path=./src --js_out=library=./src,binary:src/build/gen ./src/telemetry.proto",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -17,13 +19,25 @@
     "@types/node": "^13.9.2",
     "@types/request-promise": "^4.1.46",
     "ncp": "^2.0.0",
+    "ts-node": "^8.8.1",
     "typescript": "^3.8.3"
   },
   "dependencies": {
+    "@istanbuljs/nyc-config-typescript": "^1",
+    "@types/chai": "^4.2.8",
+    "@types/mocha": "^7.0.1",
+    "@types/sinon": "^7.5.1",
+    "bufferpack": "0.0.6",
+    "chai": "^4.2.0",
+    "dgram": "^1.0.1",
+    "google-closure-library": "^20200315.0.0",
     "jsonwebtoken": "^8.5.1",
+    "mocha": "^7.0.1",
     "moment": "^2.24.0",
     "protobufjs": "^6.8.9",
     "request": "^2.88.2",
-    "request-promise": "^4.2.5"
+    "request-promise": "^4.2.5",
+    "sinon": "^8.1.1",
+    "text-encoding": "^0.7.0"
   }
 }
