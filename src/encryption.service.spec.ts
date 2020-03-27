@@ -3,14 +3,13 @@ import "mocha";
 import sinon from "sinon";
 import * as Encryption from "./encryption.service";
 import crypto from "crypto";
-
+import { arrayBufferToString } from "./protobuf-encoder.service";
 it("encrypts in a way we can read from", () => {
     // Arrange
     const secretKey = crypto.randomBytes(32).toString('base64');
     const message = "message";
     const messageBuffer = Buffer.from("message", 'utf8');
-    const initializationVector = crypto.randomBytes(16);
-
+    const initializationVector = crypto.randomBytes(32).toString('hex').slice(0, 16);
     // Act
     const encrypted = Encryption.encrypt(messageBuffer, secretKey, initializationVector);
 

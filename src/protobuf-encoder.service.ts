@@ -22,7 +22,7 @@ export function encodeProtoBuf(file: string, proto: string, payload: any): Promi
     });
 }
 
-function ArrayBufferToString(buffer: Uint8Array) {
+export function arrayBufferToString(buffer: Uint8Array) {
     return String.fromCharCode.apply(null, Array.prototype.slice.apply(buffer));
 }
 

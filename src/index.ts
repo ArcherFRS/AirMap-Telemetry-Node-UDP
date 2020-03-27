@@ -2,9 +2,7 @@ import * as dgram from "dgram";
 import moment from "moment";
 import request, { Options } from "request-promise";
 import * as config from "./airmap.config.json";
-import jwt from "jsonwebtoken";
-import { encodeProtoBuf } from "./protobuf-encoder.service";
-import { TextDecoder } from "util";
+import { encodeProtoBuf, arrayBufferToString } from "./protobuf-encoder.service";
 import { IPosition } from "./position.interface";
 import * as Encryption from "./encryption.service";
 
@@ -370,8 +368,8 @@ async function init() {
                 const flightIdLengthBuffer = Buffer.alloc(1);
                 flightIdLengthBuffer.writeInt8(flightIdLength);
 
-                // 3 Flight ID (added later)
-                const flightIdBuffer = Buffer.from(flightId, "utf8");
+                // 3 Flight ID
+                const flightIdMessage = flightId;
 
                 // 4 Add Encryption type: uint8, 1 bytes (currently only 'aes-256-cbc' is supported; 1 is the appropriate value here)
                 const encryptionTypeBuffer = Buffer.alloc(1);
@@ -382,39 +380,35 @@ async function init() {
                 const initializationVector = Encryption.getInitializationVector();
                 console.log("Initialization Vector", initializationVector);
 
-                // Payload (added later)
-
                 /* Message Header */
                 // 6 Add Message Type ID: uint16, 2 bytes
                 const messageTypeIdBuffer = Buffer.alloc(2);
                 const positionMessageTypeId = 1;
                 messageTypeIdBuffer.writeUInt16BE(positionMessageTypeId);
 
-                // Add Message (aka payload): Serialized protocol buffer (protobuf)
-                const positionPayload = await encodeProtoBuf("./dist/telemetry.proto", "airmap.telemetry.Position", position);
-                const positionPayloadBuffer = Buffer.from(positionPayload);
+                // Create Message (aka payload): Serialized protocol buffer (protobuf)
+                const positionPayloadBuffer = await encodeProtoBuf("./dist/telemetry.proto", "airmap.telemetry.Position", position);
 
                 // 8 encrypt payload
-                const payloadEncrypted = Encryption.encrypt(positionPayloadBuffer, secretKey, initializationVector);
+                const payloadEncryptedBuffer = Encryption.encrypt(positionPayloadBuffer, secretKey, initializationVector);
+                // AIRMAP QUESTION: Does this have to be a string, or can I leave it as a Buffer?
+                const payloadEncrypted = arrayBufferToString(payloadEncryptedBuffer);
 
                 // 7 Add serialized message length (max is 64kb): uint 16, 2 bytes
                 const messageLengthBuffer = Buffer.alloc(2);
-                messageLengthBuffer.writeUInt16BE(payloadEncrypted.byteLength);
+                messageLengthBuffer.writeUInt16BE(payloadEncrypted.length);
 
-                console.log("Message:", position);
-                console.log("Encoded Message:", positionPayloadBuffer);
-                console.log("Message Encrypted:", payloadEncrypted);
-                console.log("Message Encrypted Length:", payloadEncrypted);
-                const payload = Buffer.concat(
-                    [serialNumberBuffer,
-                        flightIdLengthBuffer,
-                        flightIdBuffer,
-                        encryptionTypeBuffer,
-                        initializationVector,
-                        messageTypeIdBuffer,
-                        messageLengthBuffer,
-                        payloadEncrypted]
-                );
+                //AIRMAP QUESTION: Will this array of mixed Buffers and Strings be able to be understood and parsed by the UDP server?
+                const payload = [serialNumberBuffer,
+                    flightIdLengthBuffer,
+                    flightIdMessage,
+                    encryptionTypeBuffer,
+                    initializationVector,
+                    messageTypeIdBuffer,
+                    messageLengthBuffer,
+                    payloadEncrypted];
+
+                console.log("Payload", payload);
                 client.send(payload, portNumber, hostname, (err: any, bytes: any) => {
                     if (err) {
                         console.log("Error sending payload", err);
