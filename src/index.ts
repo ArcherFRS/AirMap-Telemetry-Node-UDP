@@ -126,6 +126,56 @@ async function getToken(apiKey: string, userId: string): Promise<string> {
     return token;
 }
 
+async function getAccessTokenFromUsernameAndPassword() {
+
+    const options: Options = {
+        method: 'POST',
+        headers: {
+            "X-API-Key": config.apiKey
+        },
+        url: `https://sso.airmap.io/oauth/ro`,
+        json: true,
+        body: {
+
+            "grant_type": "password",
+            "client_id": config.clientId,
+            "connection": "Username-Password-Authentication",
+            "username": config.username,
+            "password": config.password,
+            "scope": "openid offline_access",
+            "device": ""
+        }
+    }
+
+    //If that doesn't work, try to get access token using username + password
+    const credentials = await request(options).catch(err => {
+        console.log("error getting new access token using username & password", err);
+    });
+
+    return credentials;
+}
+
+async function getPilotId(accessToken: string): Promise<string> {
+    console.log("AirmapService.getPilotId Started");
+    const options: Options = {
+        method: 'GET',
+        url: `https://api.airmap.com/pilot/v2/profile`,
+        json: true,
+        headers: {
+            'X-API-Key': config.apiKey,
+            'Authorization': `Bearer ${accessToken}`
+        }
+    };
+
+    const pilotProfileResponse: any = await request(options);
+    console.log(`Airmap Pilot Response:`);
+    console.log(pilotProfileResponse);
+
+    const id: string = pilotProfileResponse.data.id;
+    console.log("AirmapService.getPilotId Ended");
+    return id;
+}
+
 // create plan (returns planId)
 
 async function createPlan(apiKey: string, token: string, pilotId: string): Promise<string> {
@@ -139,17 +189,17 @@ async function createPlan(apiKey: string, token: string, pilotId: string): Promi
             "Content-Type": "application/json; charset=utf-8"
         },
         body: {
-            "takeoff_latitude": 33.85505651142062,
-            "takeoff_longitude": -118.37099075317383,
+            "takeoff_latitude": 49.45505651142062,
+            "takeoff_longitude": -2.37099075317383,
             "pilot_id": pilotId,
             "start_time": "now",
             "end_time": "now",
             "max_altitude_agl": 100,
             "buffer": 1,
             "geometry": {
-                "type": "Polygon", "coordinates": [[[-118.37099075317383, 33.85505651142062], [-118.37305068969727, 33.85502978214579], [
-                    -118.37347984313963, 33.854673391015496], [-118.37306141853333, 33.85231226221667], [-118.37193489074707, 33.85174201755203], [-118.36997151374815, 33.85176874785573], [
-                    -118.36995005607605, 33.8528112231754], [-118.37099075317383, 33.85505651142062]]]
+                "type": "Polygon", "coordinates": [[[-2.37099075317383, 49.45505651142062], [-2.37305068969727, 49.45502978214579], [
+                    -2.37347984313963, 49.454673391015496], [-2.37306141853333, 49.45231226221667], [-2.37193489074707, 49.45174201755203], [-2.36997151374815, 49.45176874785573], [
+                    -2.36995005607605, 49.4528112231754], [-2.37099075317383, 49.45505651142062]]]
             }
         }
     }
@@ -247,37 +297,36 @@ async function init() {
     try {
 
         // get token
-        const jwtResponse = await getToken(config.apiKey, config.username);
+        const jwtResponse = await getAccessTokenFromUsernameAndPassword();
         if (!jwtResponse) {
             throw Error("Error with authentication");
         }
         console.log("JWT", jwtResponse);
 
         // get pilot id
-        const pilotId = jwt.decode(jwtResponse)?.sub;
+        const pilotId = await getPilotId(jwtResponse);
         console.log("pilotId", pilotId);
 
         // create flight plan
         const planId = await createPlan(config.apiKey, jwtResponse, pilotId);
+        console.log("planId", planId);
         if (!planId) {
             throw Error("Error creating plan");
         }
 
         // submit flight plan
         const flightId = await submitPlan(config.apiKey, jwtResponse, planId);
+        console.log("flightId", flightId);
         if (!flightId) {
             throw Error("Error creating flight");
         }
 
         // start comms
         const secretKey = await startComm(config.apiKey, jwtResponse, flightId);
+        console.log("secretKey", secretKey);
         if (!secretKey) {
             throw Error("Error starting communication");
         }
-
-        // decode key
-        // const buffer = new Buffer(secretKey, 'base64');
-        // const secretKeyDecoded = buffer.toString('ascii');
 
         // messages
         const position: IPosition = {
@@ -301,6 +350,7 @@ async function init() {
 
         try {
             // send 100 messages at 5Hz
+
             for (let i = 0; i < 100; i++) {
                 const timestamp = sim.getTimestamp();
                 position.timestamp = timestamp;
@@ -328,12 +378,12 @@ async function init() {
                 /* PACKAGE HEADER */
                 // 1 Add serial number (start at one): uint32, 4 bytes
                 const serialNumberBuffer = Buffer.alloc(4);
-                serialNumberBuffer.writeUInt32BE(1, 0);
+                serialNumberBuffer.writeUInt32BE(counter);
 
                 // 2 Add length of flight id: uint8, 1 bytes
                 const flightIdLength = flightId.length;
-                const flightIdBuffer = Buffer.alloc(1);
-                flightIdBuffer.writeInt8(flightIdLength, 0);
+                const flightIdLengthBuffer = Buffer.alloc(1);
+                flightIdLengthBuffer.writeInt8(flightIdLength);
 
                 // 3 Flight ID (added later)
 
@@ -349,7 +399,7 @@ async function init() {
                 // 6 Payload (added later)
 
                 /* Message Header */
-                // Add Message Type ID: uint16, 2 bytes
+                // 7 Add Message Type ID: uint16, 2 bytes
                 const messageTypeIdBuffer = Buffer.alloc(2);
                 const positionMessageTypeId = 1;
                 messageTypeIdBuffer.writeUInt16BE(positionMessageTypeId);
@@ -357,12 +407,13 @@ async function init() {
                 // Add Message (aka payload): Serialized protocol buffer (protobuf)
                 const positionPayload = await encodeProtoBuf("./dist/telemetry.proto", "airmap.telemetry.Position", position);
                 const positionPayloadBuffer = Buffer.from(positionPayload);
+
                 // encrypt payload
                 const payloadEncrypted = Encryption.encrypt(positionPayloadBuffer, secretKey, initializationVector);
 
                 // Add serialized message length (max is 64kb): uint 16, 2 bytes
                 const messageLengthBuffer = Buffer.alloc(2);
-                messageLengthBuffer.writeUInt16BE(positionPayloadBuffer.byteLength);
+                messageLengthBuffer.writeUInt16BE(payloadEncrypted.byteLength);
 
 
                 // const attitudePayload = await encodeProtoBuf("./telemetry.proto", "airmap.telemetry.Attitude", attitude);
@@ -376,7 +427,17 @@ async function init() {
                 console.log("Encoded Message:", positionPayloadBuffer);
                 console.log("Message Encrypted:", payloadEncrypted);
                 console.log("Message Encrypted Length:", payloadEncrypted);
-                client.send(payloadEncrypted, portNumber, hostname, (err: any, bytes: any) => {
+                const payload = [
+                    serialNumberBuffer,
+                    flightIdLengthBuffer,
+                    flightId,
+                    encryptionTypeBuffer,
+                    initializationVector,
+                    messageTypeIdBuffer,
+                    messageLengthBuffer,
+                    payloadEncrypted,
+                ]
+                client.send(payload, portNumber, hostname, (err: any, bytes: any) => {
                     if (err) {
                         console.log("Error sending payload", err);
                     }
