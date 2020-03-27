@@ -16,6 +16,8 @@ Execute `npm install` in the command line at the project root (install Node if y
 
 `./vscode` contains the launch file used when debugging with Visual Studio Code
 
+`./src/index.ts` is the entry point. It contains an `init()` function that can be considered the main function that runs on startup.
+
 ## To Run
 
 Execute `npm run start-local` in the command line at the root of the project.

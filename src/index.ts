@@ -1,10 +1,10 @@
 import * as dgram from "dgram";
 import moment from "moment";
-import request, { Options } from "request-promise";
 import * as config from "./airmap.config.json";
 import { encodeProtoBuf, arrayBufferToString } from "./protobuf-encoder.service";
 import { IPosition } from "./position.interface";
 import * as Encryption from "./encryption.service";
+import * as AirMapService from "./airmap.service";
 
 //  simple sawtooth wave simulation
 
@@ -100,192 +100,6 @@ class Simulator {
     }
 }
 
-// anonymous user (returns JWT)
-
-async function getToken(apiKey: string, userId: string): Promise<string> {
-    const options: Options = {
-        method: 'POST',
-        url: `https://api.airmap.com/auth/v1/anonymous/token`,
-        json: true,
-        headers: {
-            "X-API-Key": apiKey
-        },
-        body: {
-            "user_id": userId
-        }
-    }
-
-    //If that doesn't work, try to get access token using username + password
-    const credentials = await request(options).catch(err => {
-        console.log("error getting token", err);
-    });
-    console.log("Credentials", credentials);
-    const token = credentials?.data?.id_token as string;
-    return token;
-}
-
-async function getAccessTokenFromUsernameAndPassword() {
-
-    const options: Options = {
-        method: 'POST',
-        headers: {
-            "X-API-Key": config.apiKey
-        },
-        url: `https://sso.airmap.io/oauth/ro`,
-        json: true,
-        body: {
-
-            "grant_type": "password",
-            "client_id": config.clientId,
-            "connection": "Username-Password-Authentication",
-            "username": config.username,
-            "password": config.password,
-            "scope": "openid offline_access",
-            "device": ""
-        }
-    }
-
-    //If that doesn't work, try to get access token using username + password
-    const credentials = await request(options).catch(err => {
-        console.log("error getting new access token using username & password", err);
-    });
-
-    return credentials;
-}
-
-async function getPilotId(accessToken: string): Promise<string> {
-    console.log("AirmapService.getPilotId Started");
-    const options: Options = {
-        method: 'GET',
-        url: `https://api.airmap.com/pilot/v2/profile`,
-        json: true,
-        headers: {
-            'X-API-Key': config.apiKey,
-            'Authorization': `Bearer ${accessToken}`
-        }
-    };
-
-    const pilotProfileResponse: any = await request(options);
-    console.log(`Airmap Pilot Response:`);
-    console.log(pilotProfileResponse);
-
-    const id: string = pilotProfileResponse.data.id;
-    console.log("AirmapService.getPilotId Ended");
-    return id;
-}
-
-// create plan (returns planId)
-
-async function createPlan(apiKey: string, token: string, pilotId: string): Promise<string> {
-    const options: Options = {
-        method: 'POST',
-        url: 'https://api.airmap.com/flight/v2/plan',
-        json: true,
-        headers: {
-            "X-API-Key": apiKey,
-            "Authorization": "Bearer " + token,
-            "Content-Type": "application/json; charset=utf-8"
-        },
-        body: {
-            "takeoff_latitude": 49.45505651142062,
-            "takeoff_longitude": -2.37099075317383,
-            "pilot_id": pilotId,
-            "start_time": "now",
-            "end_time": "now",
-            "max_altitude_agl": 100,
-            "buffer": 1,
-            "geometry": {
-                "type": "Polygon", "coordinates": [[[-2.37099075317383, 49.45505651142062], [-2.37305068969727, 49.45502978214579], [
-                    -2.37347984313963, 49.454673391015496], [-2.37306141853333, 49.45231226221667], [-2.37193489074707, 49.45174201755203], [-2.36997151374815, 49.45176874785573], [
-                    -2.36995005607605, 49.4528112231754], [-2.37099075317383, 49.45505651142062]]]
-            }
-        }
-    }
-
-    const plan = await request(options).catch(err => {
-        console.log("error creating plan", err);
-    });
-    console.log("Created Plan", plan);
-    return plan?.data?.id;
-}
-
-// submit plan (returns flightId)
-
-async function submitPlan(apiKey: string, token: string, planId: string): Promise<string> {
-    const options: Options = {
-        method: 'POST',
-        json: true,
-        url: `https://api.airmap.com/flight/v2/plan/${planId}/submit`,
-        headers: {
-            "X-API-Key": apiKey,
-            "Authorization": `Bearer ${token}`
-        }
-    }
-
-    const plan = await request(options).catch(err => {
-        console.log("error submitting plan", err);
-    });
-    console.log("Submitted Plan", plan);
-    const flightId = plan?.data?.flight_id;
-    return flightId;
-}
-
-// start comm (returns secretKey)
-
-async function startComm(apiKey: string, token: string, flightId: string) {
-    const options: Options = {
-        method: 'POST',
-        json: true,
-        url: `https://api.airmap.com/flight/v2/${flightId}/start-comm`,
-        headers: {
-            "X-API-Key": apiKey,
-            "Authorization": `Bearer ${token}`
-        }
-    }
-    const comm = await request(options).catch(err => {
-        console.log("error starting comm", err);
-    });
-    console.log("Comm Started", comm);
-    const key = comm?.data?.key;
-    return key;
-}
-
-// end comm (returns 0)
-
-async function endComm(apiKey: string, token: string, flightId: string) {
-    const options: Options = {
-        method: 'POST',
-        json: true,
-        url: `https://api.airmap.com/flight/v2/${flightId}/end-comm`,
-        headers: {
-            "X-API-Key": apiKey,
-            "Authorization": `Bearer ${token}`
-        }
-    }
-    const comm = await request(options).catch(err => {
-        console.log("error ending comm", err);
-    });
-    console.log("Comm Ended", comm);
-    return comm;
-}
-
-// end flight (returns 0)
-
-async function endFlight(apiKey: string, token: string, flightId: string) {
-    const options: Options = {
-        method: 'POST',
-        url: `https://api.airmap.com/flight/v2/${flightId}/end`,
-        headers: {
-            "X-API-Key": apiKey,
-            "Authorization": `Bearer ${token}`
-        }
-    }
-    const flight = await request(options).catch(err => {
-        console.log("error ending flight", err);
-    });
-    console.log("Flight Ended", flight);
-    return flight;
-}
 
 function sleep(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -295,7 +109,7 @@ async function init() {
     try {
 
         // get token
-        const jwtResponse = await getAccessTokenFromUsernameAndPassword();
+        const jwtResponse = await AirMapService.getAccessTokenFromUsernameAndPassword();
         if (!jwtResponse) {
             throw Error("Error with authentication");
         }
@@ -303,25 +117,25 @@ async function init() {
         const accessToken = jwtResponse.access_token;
 
         // get pilot id
-        const pilotId = await getPilotId(accessToken);
+        const pilotId = await AirMapService.getPilotId(accessToken);
         console.log("pilotId", pilotId);
 
         // create flight plan
-        const planId = await createPlan(config.apiKey, accessToken, pilotId);
+        const planId = await AirMapService.createPlan(config.apiKey, accessToken, pilotId);
         console.log("planId", planId);
         if (!planId) {
             throw Error("Error creating plan");
         }
 
         // submit flight plan
-        const flightId = await submitPlan(config.apiKey, accessToken, planId);
+        const flightId = await AirMapService.submitPlan(config.apiKey, accessToken, planId);
         console.log("flightId", flightId);
         if (!flightId) {
             throw Error("Error creating flight");
         }
 
         // start comms
-        const secretKey = await startComm(config.apiKey, accessToken, flightId);
+        const secretKey = await AirMapService.startComm(config.apiKey, accessToken, flightId);
         console.log("secretKey", secretKey);
         if (!secretKey) {
             throw Error("Error starting communication");
