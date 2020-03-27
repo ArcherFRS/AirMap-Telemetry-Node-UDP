@@ -232,7 +232,7 @@ async function init() {
                     initializationVector,
                     positionMessageTypeId,
                     messageLength,
-                    payload
+                    position
                 ]
 
                 console.log("Data", rawData);
