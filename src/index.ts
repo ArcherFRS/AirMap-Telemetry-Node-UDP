@@ -302,27 +302,28 @@ async function init() {
             throw Error("Error with authentication");
         }
         console.log("JWT", jwtResponse);
+        const accessToken = jwtResponse.access_token;
 
         // get pilot id
-        const pilotId = await getPilotId(jwtResponse);
+        const pilotId = await getPilotId(accessToken);
         console.log("pilotId", pilotId);
 
         // create flight plan
-        const planId = await createPlan(config.apiKey, jwtResponse, pilotId);
+        const planId = await createPlan(config.apiKey, accessToken, pilotId);
         console.log("planId", planId);
         if (!planId) {
             throw Error("Error creating plan");
         }
 
         // submit flight plan
-        const flightId = await submitPlan(config.apiKey, jwtResponse, planId);
+        const flightId = await submitPlan(config.apiKey, accessToken, planId);
         console.log("flightId", flightId);
         if (!flightId) {
             throw Error("Error creating flight");
         }
 
         // start comms
-        const secretKey = await startComm(config.apiKey, jwtResponse, flightId);
+        const secretKey = await startComm(config.apiKey, accessToken, flightId);
         console.log("secretKey", secretKey);
         if (!secretKey) {
             throw Error("Error starting communication");
@@ -337,9 +338,6 @@ async function init() {
             altitude_msl: 0,
             horizontal_accuracy: 0
         }
-        // const attitude: any = {};
-        // const speed: any = {};
-        // const barometer: any = {};
 
         const sim = new Simulator();
         const client = dgram.createSocket("udp4");
@@ -360,19 +358,6 @@ async function init() {
                 position.altitude_msl = sim.getMsl();
                 position.horizontal_accuracy = sim.getHorizAccuracy();
 
-                // attitude.timestamp = timestamp;
-                // attitude.yaw = sim.getYaw();
-                // attitude.pitch = sim.getPitch();
-                // attitude.roll = sim.getRoll();
-
-                // speed.timestamp = timestamp;
-                // speed.velocity_x = sim.getVelocityX();
-                // speed.velocity_y = sim.getVelocityY();
-                // speed.velocity_z = sim.getVelocityZ();
-
-                // barometer.timestamp = timestamp;
-                // barometer.pressure = sim.getPressure();
-
                 // build payload
 
                 /* PACKAGE HEADER */
@@ -386,6 +371,7 @@ async function init() {
                 flightIdLengthBuffer.writeInt8(flightIdLength);
 
                 // 3 Flight ID (added later)
+                const flightIdBuffer = Buffer.from(flightId, "utf8");
 
                 // 4 Add Encryption type: uint8, 1 bytes (currently only 'aes-256-cbc' is supported; 1 is the appropriate value here)
                 const encryptionTypeBuffer = Buffer.alloc(1);
@@ -396,10 +382,10 @@ async function init() {
                 const initializationVector = Encryption.getInitializationVector();
                 console.log("Initialization Vector", initializationVector);
 
-                // 6 Payload (added later)
+                // Payload (added later)
 
                 /* Message Header */
-                // 7 Add Message Type ID: uint16, 2 bytes
+                // 6 Add Message Type ID: uint16, 2 bytes
                 const messageTypeIdBuffer = Buffer.alloc(2);
                 const positionMessageTypeId = 1;
                 messageTypeIdBuffer.writeUInt16BE(positionMessageTypeId);
@@ -408,35 +394,27 @@ async function init() {
                 const positionPayload = await encodeProtoBuf("./dist/telemetry.proto", "airmap.telemetry.Position", position);
                 const positionPayloadBuffer = Buffer.from(positionPayload);
 
-                // encrypt payload
+                // 8 encrypt payload
                 const payloadEncrypted = Encryption.encrypt(positionPayloadBuffer, secretKey, initializationVector);
 
-                // Add serialized message length (max is 64kb): uint 16, 2 bytes
+                // 7 Add serialized message length (max is 64kb): uint 16, 2 bytes
                 const messageLengthBuffer = Buffer.alloc(2);
                 messageLengthBuffer.writeUInt16BE(payloadEncrypted.byteLength);
-
-
-                // const attitudePayload = await encodeProtoBuf("./telemetry.proto", "airmap.telemetry.Attitude", attitude);
-
-                // const speedPayload = await encodeProtoBuf("./telemetry.proto", "airmap.telemetry.Speed", speed);
-
-                // const barometerPayload = await encodeProtoBuf("./telemetry.proto", "airmap.telemetry.Barometer", barometer);
-
 
                 console.log("Message:", position);
                 console.log("Encoded Message:", positionPayloadBuffer);
                 console.log("Message Encrypted:", payloadEncrypted);
                 console.log("Message Encrypted Length:", payloadEncrypted);
-                const payload = [
-                    serialNumberBuffer,
-                    flightIdLengthBuffer,
-                    flightId,
-                    encryptionTypeBuffer,
-                    initializationVector,
-                    messageTypeIdBuffer,
-                    messageLengthBuffer,
-                    payloadEncrypted,
-                ]
+                const payload = Buffer.concat(
+                    [serialNumberBuffer,
+                        flightIdLengthBuffer,
+                        flightIdBuffer,
+                        encryptionTypeBuffer,
+                        initializationVector,
+                        messageTypeIdBuffer,
+                        messageLengthBuffer,
+                        payloadEncrypted]
+                );
                 client.send(payload, portNumber, hostname, (err: any, bytes: any) => {
                     if (err) {
                         console.log("Error sending payload", err);
@@ -448,7 +426,7 @@ async function init() {
                 counter += 1;
 
                 // wait to send next message (5 hz)
-                const milliseconds = 200;
+                const milliseconds = 1000;
                 await sleep(milliseconds);
                 console.log("Sleeping before sending next message");
             }
