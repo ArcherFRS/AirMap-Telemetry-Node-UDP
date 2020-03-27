@@ -176,7 +176,8 @@ async function init() {
                 /* PACKAGE HEADER */
                 // 1 Add serial number (start at one): uint32, 4 bytes
                 const serialNumberBuffer = Buffer.alloc(4);
-                serialNumberBuffer.writeUInt32BE(counter);
+                const serialNumber = counter;
+                serialNumberBuffer.writeUInt32BE(serialNumber);
 
                 // 2 Add length of flight id: uint8, 1 bytes
                 const flightIdLength = Buffer.byteLength(flightId, 'utf8')
@@ -206,20 +207,35 @@ async function init() {
 
                 // 7 Add serialized message length (max is 64kb): uint 16, 2 bytes
                 const messageLengthBuffer = Buffer.alloc(2);
-                messageLengthBuffer.writeUInt16BE(positionPayloadBuffer.byteLength);
+                const messageLength = positionPayloadBuffer.byteLength;
+                messageLengthBuffer.writeUInt16BE(messageLength);
 
                 // Encrypt Payload
                 const messageToBeEncrypted = Buffer.concat([messageTypeIdBuffer, messageTypeIdBuffer, positionPayloadBuffer]);
                 const payloadEncryptedBuffer = Encryption.encrypt(messageToBeEncrypted, secretKey, initializationVector);
 
                 //AIRMAP QUESTION: Will this array of mixed Buffers and Strings be able to be understood and parsed by the UDP server?
-                const payload = [serialNumberBuffer,
+                const payload = [
+                    serialNumberBuffer,
                     flightIdLengthBuffer,
                     flightIdMessage,
                     encryptionTypeBuffer,
                     initializationVector,
-                    payloadEncryptedBuffer];
+                    payloadEncryptedBuffer
+                ];
 
+                const rawData = [
+                    serialNumber,
+                    flightIdLength,
+                    flightIdMessage,
+                    encryptionType,
+                    initializationVector,
+                    positionMessageTypeId,
+                    messageLength,
+                    payload
+                ]
+
+                console.log("Data", rawData);
                 console.log("Payload", payload);
                 client.send(payload, portNumber, hostname, (err: any, bytes: any) => {
                     if (err) {
