@@ -2,6 +2,7 @@
   "name": "udp-client-typescript",
   "version": "1.0.0",
   "description": "",
+  "license": "UNLICENSED",
   "main": "index.js",
   "scripts": {
     "test-local": "mocha --reporter spec --require ts-node/register src/**/*.spec.ts",
@@ -13,7 +14,6 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
   "devDependencies": {
     "@types/jsonwebtoken": "^8.3.8",
     "@types/node": "^13.9.2",
