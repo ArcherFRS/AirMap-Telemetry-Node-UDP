@@ -21,22 +21,3 @@ export function encodeProtoBuf(file: string, proto: string, payload: any): Promi
         throw new Error("Error encoding protobuf");
     });
 }
-
-export function arrayBufferToString(buffer: Uint8Array) {
-    return String.fromCharCode.apply(null, Array.prototype.slice.apply(buffer));
-}
-
-function BinaryToString(binary: string) {
-    var error;
-
-    try {
-        return decodeURIComponent(escape(binary));
-    } catch (_error) {
-        error = _error;
-        if (error instanceof URIError) {
-            return binary;
-        } else {
-            throw error;
-        }
-    }
-}

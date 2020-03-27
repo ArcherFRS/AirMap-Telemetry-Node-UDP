@@ -1,7 +1,7 @@
 import * as dgram from "dgram";
 import moment from "moment";
 import * as config from "./airmap.config.json";
-import { encodeProtoBuf, arrayBufferToString } from "./protobuf-encoder.service";
+import { encodeProtoBuf } from "./protobuf-encoder.service";
 import { IPosition } from "./position.interface";
 import * as Encryption from "./encryption.service";
 import * as AirMapService from "./airmap.service";
@@ -178,7 +178,8 @@ async function init() {
                 serialNumberBuffer.writeUInt32BE(counter);
 
                 // 2 Add length of flight id: uint8, 1 bytes
-                const flightIdLength = flightId.length;
+                //AIRMAP QUESTION: Is this how I get the correct flightId length? It returns how many bytes that string is.
+                const flightIdLength = Buffer.byteLength(flightId, 'utf8')
                 const flightIdLengthBuffer = Buffer.alloc(1);
                 flightIdLengthBuffer.writeInt8(flightIdLength);
 
@@ -204,13 +205,12 @@ async function init() {
                 const positionPayloadBuffer = await encodeProtoBuf("./dist/telemetry.proto", "airmap.telemetry.Position", position);
 
                 // 8 encrypt payload
+                //AIRMAP QUESTION: Can I leave this as a buffer type?
                 const payloadEncryptedBuffer = Encryption.encrypt(positionPayloadBuffer, secretKey, initializationVector);
-                // AIRMAP QUESTION: Does this have to be a string, or can I leave it as a Buffer?
-                const payloadEncrypted = arrayBufferToString(payloadEncryptedBuffer);
 
                 // 7 Add serialized message length (max is 64kb): uint 16, 2 bytes
                 const messageLengthBuffer = Buffer.alloc(2);
-                messageLengthBuffer.writeUInt16BE(payloadEncrypted.length);
+                messageLengthBuffer.writeUInt16BE(payloadEncryptedBuffer.byteLength);
 
                 //AIRMAP QUESTION: Will this array of mixed Buffers and Strings be able to be understood and parsed by the UDP server?
                 const payload = [serialNumberBuffer,
@@ -220,7 +220,7 @@ async function init() {
                     initializationVector,
                     messageTypeIdBuffer,
                     messageLengthBuffer,
-                    payloadEncrypted];
+                    messageLengthBuffer];
 
                 console.log("Payload", payload);
                 client.send(payload, portNumber, hostname, (err: any, bytes: any) => {
@@ -243,8 +243,8 @@ async function init() {
             console.log("Error sending telemetry", e);
         }
         client.close();
-        await endComm(config.apiKey, jwtResponse, flightId);
-        await endFlight(config.apiKey, jwtResponse, flightId);
+        await AirMapService.endComm(config.apiKey, jwtResponse, flightId);
+        await AirMapService.endFlight(config.apiKey, jwtResponse, flightId);
     }
     catch (e) {
         console.log("Error", e);
