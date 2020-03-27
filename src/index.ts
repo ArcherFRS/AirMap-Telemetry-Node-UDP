@@ -5,6 +5,7 @@ import { encodeProtoBuf } from "./protobuf-encoder.service";
 import { IPosition } from "./position.interface";
 import * as Encryption from "./encryption.service";
 import * as AirMapService from "./airmap.service";
+import { access } from "fs";
 
 //  simple sawtooth wave simulation
 
@@ -178,7 +179,6 @@ async function init() {
                 serialNumberBuffer.writeUInt32BE(counter);
 
                 // 2 Add length of flight id: uint8, 1 bytes
-                //AIRMAP QUESTION: Is this how I get the correct flightId length? It returns how many bytes that string is.
                 const flightIdLength = Buffer.byteLength(flightId, 'utf8')
                 const flightIdLengthBuffer = Buffer.alloc(1);
                 flightIdLengthBuffer.writeInt8(flightIdLength);
@@ -201,16 +201,16 @@ async function init() {
                 const positionMessageTypeId = 1;
                 messageTypeIdBuffer.writeUInt16BE(positionMessageTypeId);
 
-                // Create Message (aka payload): Serialized protocol buffer (protobuf)
+                // 8 Create Message (aka payload): Serialized protocol buffer (protobuf)
                 const positionPayloadBuffer = await encodeProtoBuf("./dist/telemetry.proto", "airmap.telemetry.Position", position);
-
-                // 8 encrypt payload
-                //AIRMAP QUESTION: Can I leave this as a buffer type?
-                const payloadEncryptedBuffer = Encryption.encrypt(positionPayloadBuffer, secretKey, initializationVector);
 
                 // 7 Add serialized message length (max is 64kb): uint 16, 2 bytes
                 const messageLengthBuffer = Buffer.alloc(2);
-                messageLengthBuffer.writeUInt16BE(payloadEncryptedBuffer.byteLength);
+                messageLengthBuffer.writeUInt16BE(positionPayloadBuffer.byteLength);
+
+                // Encrypt Payload
+                const messageToBeEncrypted = Buffer.concat([messageTypeIdBuffer, messageTypeIdBuffer, positionPayloadBuffer]);
+                const payloadEncryptedBuffer = Encryption.encrypt(messageToBeEncrypted, secretKey, initializationVector);
 
                 //AIRMAP QUESTION: Will this array of mixed Buffers and Strings be able to be understood and parsed by the UDP server?
                 const payload = [serialNumberBuffer,
@@ -218,9 +218,7 @@ async function init() {
                     flightIdMessage,
                     encryptionTypeBuffer,
                     initializationVector,
-                    messageTypeIdBuffer,
-                    messageLengthBuffer,
-                    messageLengthBuffer];
+                    payloadEncryptedBuffer];
 
                 console.log("Payload", payload);
                 client.send(payload, portNumber, hostname, (err: any, bytes: any) => {
@@ -243,8 +241,8 @@ async function init() {
             console.log("Error sending telemetry", e);
         }
         client.close();
-        await AirMapService.endComm(config.apiKey, jwtResponse, flightId);
-        await AirMapService.endFlight(config.apiKey, jwtResponse, flightId);
+        await AirMapService.endComm(config.apiKey, accessToken, flightId);
+        await AirMapService.endFlight(config.apiKey, accessToken, flightId);
     }
     catch (e) {
         console.log("Error", e);
