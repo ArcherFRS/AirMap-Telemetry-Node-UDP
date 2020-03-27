@@ -3,36 +3,34 @@ import "mocha";
 import sinon from "sinon";
 import { IPosition } from "./position.interface";
 import { encodeProtoBuf } from "./protobuf-encoder.service";
-require("google-closure-library");
-declare var goog: any;
-goog.require("goog.crypt.Sha1");
+
 describe("Protobuf Encoder Service", () => {
     it("encodes position object to a string", async () => {
         // Arrange
+        // // const position: IPosition = {
+        // //     timestamp: 1585149313098,
+        // //     latitude: 34.017802,
+        // //     longitude: -118.449303,
+        // //     altitude_agl: 1.0,
+        // //     altitude_msl: 1.0,
+        // //     horizontal_accuracy: 1.0
+        // // }
         // const position: IPosition = {
-        //     timestamp: 1585149313098,
-        //     latitude: 34.017802,
-        //     longitude: -118.449303,
-        //     altitude_agl: 1.0,
-        //     altitude_msl: 1.0,
-        //     horizontal_accuracy: 1.0
+        //     timestamp: 1,
+        //     latitude: 1.1,
+        //     longitude: 1.1,
+        //     altitude_agl: 1.100000023841858,
+        //     altitude_msl: 1.100000023841858,
+        //     horizontal_accuracy: 1.100000023841858
         // }
-        const position: IPosition = {
-            timestamp: 1,
-            latitude: 1,
-            longitude: 1,
-            altitude_agl: 1,
-            altitude_msl: 1,
-            horizontal_accuracy: 1
-        }
 
-        // Act
+        // // Assert
+        // const result = await encodeProtoBuf("./dist/telemetry.proto", "airmap.telemetry.Position", position);
+        // console.log("result", result);
 
-        // Assert
-        const result = await encodeProtoBuf("./dist/telemetry.proto", "airmap.telemetry.Position", position);
-        console.log("result", result);
-        // const bytestringExpected = 'b'\x00\x01\x00#\x08\x01\x11\x00\x00\x00\x00\x00\x00\xf0?\x19\x00\x00\x00\x00\x00\x00\xf0?%\x00\x00\x80?-\x00\x00\x80?5\x00\x00\x80?\x00\x02\x00\x16\x08\xf9\xef\x87\x9b\x91.\x15\x00\x00\x80?\x1d\x00\x00\xb2\xc2%\x00\x00\xb2\xc2\x00\x03\x00\x16\x08\xf9\xef\x87\x9b\x91.\x15\x00\x000A\x1d\x00\x000A%\x00\x000A\x00\x04\x00\x0c\x08\xf9\xef\x87\x9b\x91.\x15f\x06}D\x05\x05\x05\x05\x05'
-        expect(0).to.equal(1);
+        // // const bytestringExpected = 'b'\x08\x01\x11\x9a\x99\x99\x99\x99\x99\xf1?\x19\x9a\x99\x99\x99\x99\x99\xf1?%\xcd\xcc\x8c?-\xcd\xcc\x8c?5\xcd\xcc\x8c?''
+        // // const byteStringExpected: ["08", "01", "11", "9a", "99", "99", "99", "99", "99", "3f", "19", "9a", "99", "99", "99", "99", "99", "f1", "3f"]
+        // expect(result).to.equal("\x08\x01\x11\x9a\x99\x99\x99\x99\x99\xf1?\x19\x9a\x99\x99\x99\x99\x99\xf1?%\xcd\xcc\x8c?-\xcd\xcc\x8c?5\xcd\xcc\x8c?");
 
     });
 });

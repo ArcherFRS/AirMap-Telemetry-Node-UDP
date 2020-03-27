@@ -8,7 +8,7 @@
     "copy-proto": "ncp ./src/telemetry.proto ./dist/telemetry.proto",
     "build-local": "tsc && npm run copy-proto",
     "start-local": "tsc && npm run copy-proto && node ./dist/index.js",
-    "generate-proto": "protoc --proto_path=./src --js_out=library=./src,binary:src/build/gen ./src/telemetry.proto",
+    "generate-proto": "!!!! DO NOT OVERWRITE EXISTING PROTO 'protoc --proto_path=./src --js_out=library=./src,binary:src/build/gen ./src/telemetry.proto'",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

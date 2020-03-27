@@ -1,5 +1,4 @@
 import * as dgram from "dgram";
-import * as crypto from "crypto";
 import moment from "moment";
 import request, { Options } from "request-promise";
 import * as config from "./airmap.config.json";
@@ -7,6 +6,7 @@ import jwt from "jsonwebtoken";
 import { encodeProtoBuf } from "./protobuf-encoder.service";
 import { TextDecoder } from "util";
 import { IPosition } from "./position.interface";
+import * as Encryption from "./encryption.service";
 
 //  simple sawtooth wave simulation
 
@@ -243,17 +243,9 @@ function sleep(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function encrypt(value: any, key: string) {
-    const iv = Buffer.alloc(16, 0);
-    const secretKey = Buffer.from(key, 'base64');
-    let cipher = crypto.createCipheriv('aes-256-cbc', secretKey, iv);
-    let encrypted = cipher.update(value, 'utf8', 'binary');
-    encrypted += cipher.final('binary');
-    return encrypted;
-}
-
 async function init() {
     try {
+
         // get token
         const jwtResponse = await getToken(config.apiKey, config.username);
         if (!jwtResponse) {
@@ -334,24 +326,42 @@ async function init() {
                 // build payload
 
                 /* PACKAGE HEADER */
-                // Add serial number (start at one): uint32, 4 bytes
-                // Add length of flight id: uint8, 1 bytes
-                // Add flight id: string 1 - 256 bytes
-                // Add Encryption type: uint8, 1 bytes (currently only 'aes-256-cbc' is supported; I suppose "1" is the appropriate value here?)
-                // Add Initialization Vector: raw, 16 bytes
-                // Add Payload: raw, 1-65k bytes (byte concatenated, serialized messages, each prefixed by a Message Header)
+                // 1 Add serial number (start at one): uint32, 4 bytes
+                const serialNumberBuffer = Buffer.alloc(4);
+                serialNumberBuffer.writeUInt32BE(1, 0);
+
+                // 2 Add length of flight id: uint8, 1 bytes
+                const flightIdLength = flightId.length;
+                const flightIdBuffer = Buffer.alloc(1);
+                flightIdBuffer.writeInt8(flightIdLength, 0);
+
+                // 3 Flight ID (added later)
+
+                // 4 Add Encryption type: uint8, 1 bytes (currently only 'aes-256-cbc' is supported; 1 is the appropriate value here)
+                const encryptionTypeBuffer = Buffer.alloc(1);
+                const encryptionType = 1; //Special value for airmap
+                encryptionTypeBuffer.writeUInt8(encryptionType);
+
+                // 5 Add Initialization Vector: raw, 16 bytes
+                const initializationVector = Encryption.getInitializationVector();
+                console.log("Initialization Vector", initializationVector);
+
+                // 6 Payload (added later)
 
                 /* Message Header */
                 // Add Message Type ID: uint16, 2 bytes
-                // Add serialized message length (max is 64kb): uint 16, 2 bytes
-                // Add Message (aka payload): Serialized protocol buffer (protobuf) byte string
+                const messageTypeIdBuffer = Buffer.alloc(2);
+                const positionMessageTypeId = 1;
+                messageTypeIdBuffer.writeUInt16BE(positionMessageTypeId);
 
-                /* Message */
-
+                // Add Message (aka payload): Serialized protocol buffer (protobuf)
                 const positionPayloadBuffer = await encodeProtoBuf("./dist/telemetry.proto", "airmap.telemetry.Position", position);
-                // Now we have a byte array (e.g. [155,220])
-                // This byte array represents binary numbers (aka, 155 is converted to 10011011 and 220 to 11011100)
-                const positionPayload = Array.prototype.toString.call(positionPayloadBuffer);
+                // encrypt payload
+                const payloadEncrypted = Encryption.encrypt(positionPayloadBuffer, secretKey, initializationVector);
+
+                // Add serialized message length (max is 64kb): uint 16, 2 bytes
+                const messageLengthBuffer = Buffer.alloc(2);
+                messageLengthBuffer.writeUInt16BE(positionPayloadBuffer.byteLength);
 
 
                 // const attitudePayload = await encodeProtoBuf("./telemetry.proto", "airmap.telemetry.Attitude", attitude);
@@ -360,10 +370,9 @@ async function init() {
 
                 // const barometerPayload = await encodeProtoBuf("./telemetry.proto", "airmap.telemetry.Barometer", barometer);
 
-                // encrypt payload
-                const payloadEncrypted = encrypt(positionPayload, secretKey);
+
                 console.log("Message:", position);
-                console.log("Encoded Message:", positionPayload);
+                console.log("Encoded Message:", positionPayloadBuffer);
                 console.log("Message Encrypted:", payloadEncrypted);
                 console.log("Message Encrypted Length:", payloadEncrypted);
                 client.send(payloadEncrypted, portNumber, hostname, (err: any, bytes: any) => {
