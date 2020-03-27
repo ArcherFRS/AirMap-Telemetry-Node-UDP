@@ -36,7 +36,7 @@ class Simulator {
 
     public getTimestamp() {
         // Plus is unary to convert string to number
-        const d = +moment().format('x');
+        const d = +moment.utc().format('x');
         return d;
     }
 
@@ -211,7 +211,7 @@ async function init() {
                 messageLengthBuffer.writeUInt16BE(messageLength);
 
                 // Encrypt Payload
-                const messageToBeEncrypted = Buffer.concat([messageTypeIdBuffer, messageTypeIdBuffer, positionPayloadBuffer]);
+                const messageToBeEncrypted = Buffer.concat([messageTypeIdBuffer, messageLengthBuffer, positionPayloadBuffer]);
                 const payloadEncryptedBuffer = Encryption.encrypt(messageToBeEncrypted, secretKey, initializationVector);
 
                 //AIRMAP QUESTION: Will this array of mixed Buffers and Strings be able to be understood and parsed by the UDP server?

@@ -25,7 +25,3 @@ Execute `npm run start-local` in the command line at the root of the project.
 ## To Test
 
 Execute `npm run test-local` in the command line at the root of the project.
-
-## License
-
-COPYRIGHT ARCHER FIRST RESPONSE SYSTEMS, LLC
