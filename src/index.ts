@@ -355,7 +355,8 @@ async function init() {
                 messageTypeIdBuffer.writeUInt16BE(positionMessageTypeId);
 
                 // Add Message (aka payload): Serialized protocol buffer (protobuf)
-                const positionPayloadBuffer = await encodeProtoBuf("./dist/telemetry.proto", "airmap.telemetry.Position", position);
+                const positionPayload = await encodeProtoBuf("./dist/telemetry.proto", "airmap.telemetry.Position", position);
+                const positionPayloadBuffer = Buffer.from(positionPayload);
                 // encrypt payload
                 const payloadEncrypted = Encryption.encrypt(positionPayloadBuffer, secretKey, initializationVector);
 

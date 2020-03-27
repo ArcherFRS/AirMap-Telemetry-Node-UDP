@@ -8,8 +8,8 @@ export function encrypt(value: Buffer, base64EncodedKey: string, initializationV
     return encrypted;
 }
 
-export function getInitializationVector() {
-    const initializationVector = crypto.randomBytes(16).toString('utf-8');
+export function getInitializationVector(): Buffer {
+    const initializationVector = crypto.randomBytes(16);
     return initializationVector;
 }
 
